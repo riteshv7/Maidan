@@ -8,5 +8,7 @@ DerivedData/
 .netrc
 /Sources/cricket score widget/Config.swift
 /cricket_score_widget
-
-
+/Cricket Score.app/
+*.iconset/
+*.icns
+widget.log

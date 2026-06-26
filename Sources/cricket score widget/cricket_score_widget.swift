@@ -23,124 +23,536 @@ struct CricketMenuBarApp: App {
             Text(matchService.menuBarTitle)
         }
         .menuBarExtraStyle(.window)
+        
+        // Phase 3: The Settings window scene
+        Settings {
+            SettingsView()
+        }
+    }
+}
+
+// MARK: - Settings View
+
+struct SettingsView: View {
+    var isInline: Bool = false
+    
+    // Persist API Key in UserDefaults via @AppStorage
+    @AppStorage("apiKey") private var apiKey: String = ""
+    
+    // Persist Poll Interval in UserDefaults via @AppStorage
+    @AppStorage("pollInterval") private var pollInterval: Double = 120.0
+    
+    // Phase 6: Persist Favorite Team in UserDefaults via @AppStorage
+    @AppStorage("favoriteTeam") private var favoriteTeam: String = ""
+    
+    // Major Matches Filter Toggle
+    @AppStorage("filterMajorMatches") private var filterMajorMatches: Bool = true
+    
+    // Menu Bar Customization Style
+    @AppStorage("menuBarStyle") private var menuBarStyle: String = "compact"
+    
+    // Launch at Login Toggle
+    @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
+    
+    var body: some View {
+        Form {
+            VStack(alignment: .leading, spacing: 14) {
+                // Section 1: API Key
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("API Configuration")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                    
+                    TextField("Paste your Highlightly or RapidAPI key here", text: $apiKey)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: isInline ? 280 : 340)
+                    
+                    Text("If empty, falls back to key in Config.swift.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                Divider()
+                
+                // Section 2: Match Feed Filter & Startup
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Match Feed & Startup")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                    
+                    Toggle("Show Major Matches Only", isOn: $filterMajorMatches)
+                        .toggleStyle(.checkbox)
+                        .font(.subheadline)
+                    
+                    Text("Only shows IPL, India matches, and international fixtures between major teams.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                    
+                    Toggle("Launch at Login", isOn: $launchAtLogin)
+                        .toggleStyle(.checkbox)
+                        .font(.subheadline)
+                        .padding(.top, 4)
+                }
+                
+                Divider()
+                
+                // Section 3: Favorite Team Selection (Phase 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Favorite Team (Auto-Select)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                    
+                    TextField("e.g. India, GT, AUS, ENG", text: $favoriteTeam)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: isInline ? 280 : 340)
+                    
+                    if !isInline {
+                        Text("Auto-selects the live match featuring this team if you haven't made a choice.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Divider()
+                
+                // Section 4: Menu Bar Customization
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Menu Bar Customization")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                    
+                    Picker("Style", selection: $menuBarStyle) {
+                        Text("Full — IND 142/3 (16.2)").tag("full")
+                        Text("Compact — IND 142/3").tag("compact")
+                        Text("Minimal — 🏏 🟢").tag("minimal")
+                    }
+                    .pickerStyle(.radioGroup)
+                    .font(.subheadline)
+                }
+                
+                Divider()
+                
+                // Section 5: Poll Interval
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Refresh Speed")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                    
+                    Picker("Interval", selection: $pollInterval) {
+                        Text("Relaxed (free plan) — 120s").tag(120.0)
+                        Text("Live (paid plan) — 20s").tag(20.0)
+                        Text("Death overs — 10s").tag(10.0)
+                    }
+                    .pickerStyle(.radioGroup)
+                    .font(.subheadline)
+                    
+                    if !isInline {
+                        Text("Note: Faster polling speeds require a paid API subscription.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(isInline ? 8 : 20)
+        }
+        .frame(width: isInline ? nil : 380, height: isInline ? nil : 480)
+        .navigationTitle("Cricket Widget Settings")
     }
 }
 
 // MARK: - Dropdown Window View
 
 struct DropdownView: View {
+    @Environment(\.openSettings) private var openSettings
     var matchService: MatchService
     
+    // Phase 6: Bind selection to AppStorage so it persists automatically
+    @AppStorage("selectedMatchID") private var selectedMatchID: String = ""
+    
+    // Additive: Expand/collapse state for Today's Matches
+    @State private var isTodayMatchesExpanded: Bool = false
+    
+    // New state to toggle inline Settings panel
+    @State private var showSettings: Bool = false
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let match = matchService.currentMatch {
-                // Header: Match Name and Live Indicator
-                HStack(alignment: .center, spacing: 8) {
-                    Text(match.name)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .lineLimit(2)
-                        .foregroundColor(.primary)
+        let liveMatchesList = matchService.allMatches.filter { $0.state == .live || $0.state == .onBreak }
+        let finishedMatchesList = matchService.allMatches.filter { $0.state == .finished }
+        let upcomingMatchesList = matchService.allMatches.filter { $0.state == .scheduled }
+        
+        return VStack(alignment: .leading, spacing: 12) {
+            if showSettings {
+                // Inline Settings Panel
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Cricket Widget Settings")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Button(action: {
+                            withAnimation {
+                                showSettings = false
+                            }
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.bottom, 2)
                     
+                    ScrollView {
+                        SettingsView(isInline: true)
+                    }
+                    .frame(maxHeight: 280)
+                }
+                
+                Divider()
+                
+                // Footer for Settings Panel
+                HStack {
                     Spacer()
+                    Button("Back") {
+                        withAnimation {
+                            showSettings = false
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
                     
-                    if match.state == .live {
-                        LiveIndicatorView()
+                    Button("Quit") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                // Selected Match Details
+                if let match = matchService.currentMatch {
+                    // Header: Match Name and Live Indicator (Click to open scorecard in browser)
+                    Button(action: {
+                        let query = "cricket score \(match.name)"
+                        if let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                           let url = URL(string: "https://www.google.com/search?q=\(encoded)") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }) {
+                        HStack(alignment: .center, spacing: 6) {
+                            Text(match.name)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .lineLimit(2)
+                                .foregroundColor(.blue) // Highlight as clickable
+                            
+                            Image(systemName: "arrow.up.forward.app")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            
+                            Spacer()
+                            
+                            if match.state == .live {
+                                LiveIndicatorView()
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Divider()
+                    
+                    // Scores for both teams
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(match.innings, id: \.teamShortName) { innings in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(innings.teamShortName)
+                                    .font(.system(.body, design: .monospaced))
+                                    .fontWeight(.bold)
+                                    .frame(width: 55, alignment: .leading)
+                                
+                                Text(innings.scoreText)
+                                    .font(.body)
+                                
+                                if let info = innings.infoText, !info.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text("(\(info))")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Hero Number Block (Chase status, CRR, or completed report)
+                    Text(match.heroNumberString)
+                        .font(.system(.body, design: .rounded))
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(6)
+                        .padding(.top, 4)
+                    
+                    // Status Line
+                    Text(match.statusText)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .italic()
+                        .padding(.top, 2)
+                    
+                } else {
+                    // Loading / Empty State / No Key State
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(matchService.menuBarTitle)
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            if matchService.isFetching {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                        
+                        if !matchService.hasAPIKey {
+                            Text("To view live scores, click 'Settings…' below and enter a valid Highlightly or RapidAPI key.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .lineLimit(3)
+                        }
+                    }
+                }
+                
+                // Additive: Today's Matches Expandable Section
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Button(action: {
+                        withAnimation {
+                            isTodayMatchesExpanded.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text("Today's Matches (\(matchService.allMatches.count))")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            Image(systemName: isTodayMatchesExpanded ? "chevron.up" : "chevron.down")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    if isTodayMatchesExpanded {
+                        if matchService.allMatches.isEmpty {
+                            Text("No matches scheduled for today.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .padding(.vertical, 8)
+                        } else {
+                            // Fixed height ScrollView to prevent layout collapsing in accessory Extra window
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    // 1. Live/Break Matches Section (treats stumps/tea sensibly)
+                                    if !liveMatchesList.isEmpty {
+                                        matchSection(title: "Live", matches: liveMatchesList)
+                                    }
+                                    
+                                    // 2. Finished Matches Section
+                                    if !finishedMatchesList.isEmpty {
+                                        matchSection(title: "Finished", matches: finishedMatchesList)
+                                    }
+                                    
+                                    // 3. Upcoming Matches Section
+                                    if !upcomingMatchesList.isEmpty {
+                                        matchSection(title: "Upcoming", matches: upcomingMatchesList)
+                                    }
+                                }
+                                .padding(.trailing, 8)
+                            }
+                            .frame(height: 150)
+                        }
                     }
                 }
                 
                 Divider()
                 
-                // Scores for both teams
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(match.innings, id: \.teamShortName) { innings in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(innings.teamShortName)
-                                .font(.system(.body, design: .monospaced))
-                                .fontWeight(.bold)
-                                .frame(width: 50, alignment: .leading)
-                            
-                            Text(innings.scoreText)
-                                .font(.body)
-                            
-                            if let info = innings.infoText, !info.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text("(\(info))")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
-                
-                // Status Line
-                Text(match.statusText)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .italic()
-                    .padding(.top, 2)
-                
-            } else {
-                // Loading / Empty State
-                HStack {
-                    Text(matchService.menuBarTitle)
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    if matchService.isFetching {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
-            }
-            
-            Divider()
-            
-            // Footer: Quota & Actions
-            HStack(alignment: .center) {
-                // Quota Remaining
-                if let quota = matchService.rateLimitRemaining {
-                    Text("API: \(quota) left today")
-                        .font(.footnote)
-                        .foregroundColor(quota < 20 ? .red : .secondary)
-                } else {
-                    Text("API: Unknown quota")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                // Refresh Button
-                Button(action: {
-                    Task {
-                        await matchService.fetchUpdates()
-                    }
-                }) {
-                    HStack(spacing: 4) {
-                        if matchService.isFetching {
-                            ProgressView()
-                                .controlSize(.small)
-                                .scaleEffect(0.7)
+                // Footer: Quota & Actions
+                HStack(alignment: .center) {
+                    // Quota Remaining & Active Poll Interval (Phase 5)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let quota = matchService.rateLimitRemaining {
+                            Text("API: \(quota) left today")
+                                .font(.footnote)
+                                .foregroundColor(quota < 20 ? .red : .secondary)
                         } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.caption)
+                            Text("API: Unknown quota")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
                         }
-                        Text("Refresh now")
+                        
+                        Text("Poll Speed: \(Int(matchService.activePollInterval))s")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
                     }
+                    
+                    Spacer()
+                    
+                    // Refresh Button
+                    Button(action: {
+                        Task {
+                            await matchService.fetchUpdates()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            if matchService.isFetching {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.caption)
+                            }
+                            Text("Refresh")
+                        }
+                    }
+                    .disabled(matchService.isFetching || !matchService.hasAPIKey)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    
+                    // Settings Button (Toggles inline Settings panel)
+                    Button("Settings…") {
+                        withAnimation {
+                            showSettings = true
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    // Quit Button
+                    Button("Quit") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .disabled(matchService.isFetching)
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                
-                // Quit Button
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.bordered)
             }
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(width: 345)
+    }
+    
+    // MARK: - Match Section Helper
+    
+    @ViewBuilder
+    private func matchSection(title: String, matches: [Match]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+                .padding(.bottom, 2)
+            
+            ForEach(matches) { match in
+                Button(action: {
+                    selectedMatchID = match.id
+                }) {
+                    HStack(spacing: 8) {
+                        // Radio dot indicating selection
+                        Image(systemName: selectedMatchID == match.id ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(selectedMatchID == match.id ? .blue : .secondary)
+                            .font(.caption)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                let homeAbbr = match.innings.first?.teamShortName ?? "T1"
+                                let awayAbbr = match.innings.last?.teamShortName ?? "T2"
+                                
+                                Text("\(homeAbbr) vs \(awayAbbr)")
+                                    .fontWeight(.semibold)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                
+                                Text(match.format)
+                                    .font(.system(size: 8, weight: .bold))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.blue.opacity(0.12))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(3)
+                            }
+                            
+                            // Context-based subtitle
+                            Group {
+                                if match.state == .live || match.state == .onBreak {
+                                    HStack(spacing: 4) {
+                                        Text(scoresString(for: match))
+                                        Circle()
+                                            .fill(Color.green)
+                                            .frame(width: 6, height: 6)
+                                    }
+                                } else if match.state == .finished {
+                                    Text("\(scoresString(for: match)) · \(match.statusText)")
+                                } else {
+                                    Text("Starts at \(formatStartTime(match.startTime))")
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(selectedMatchID == match.id ? Color.blue.opacity(0.08) : Color.clear)
+                    .cornerRadius(6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+    
+    private func scoresString(for match: Match) -> String {
+        let home = match.innings.first
+        let away = match.innings.last
+        let homeScore = home?.scoreText ?? "-"
+        let awayScore = away?.scoreText ?? "-"
+        let homeAbbr = home?.teamShortName ?? "T1"
+        let awayAbbr = away?.teamShortName ?? "T2"
+        return "\(homeAbbr) \(homeScore) / \(awayAbbr) \(awayScore)"
+    }
+    
+    private func formatStartTime(_ isoString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        var date = formatter.date(from: isoString)
+        if date == nil {
+            let fallbackFormatter = ISO8601DateFormatter()
+            fallbackFormatter.formatOptions = [.withInternetDateTime]
+            date = fallbackFormatter.date(from: isoString)
+        }
+        
+        guard let validDate = date else {
+            if isoString.count >= 16 {
+                return String(isoString.prefix(16).suffix(5)) // e.g. "14:30"
+            }
+            return isoString
+        }
+        
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .none
+        displayFormatter.timeStyle = .short
+        displayFormatter.timeZone = TimeZone.current
+        return displayFormatter.string(from: validDate)
     }
 }
 
