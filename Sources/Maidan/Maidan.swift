@@ -54,6 +54,32 @@ struct SettingsView: View {
     // Launch at Login Toggle
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     
+    // Predefined popular teams list
+    private let popularTeams: [(key: String, value: String)] = [
+        ("India", "🇮🇳 India"),
+        ("Australia", "🇦🇺 Australia"),
+        ("England", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 England"),
+        ("South Africa", "🇿🇦 South Africa"),
+        ("Pakistan", "🇵🇰 Pakistan"),
+        ("New Zealand", "🇳🇿 New Zealand"),
+        ("West Indies", "🌴 West Indies"),
+        ("Sri Lanka", "🇱🇰 Sri Lanka"),
+        ("Bangladesh", "🇧🇩 Bangladesh"),
+        ("Afghanistan", "🇦🇫 Afghanistan"),
+        ("Super Kings", "💛 Chennai Super Kings (CSK)"),
+        ("Indians", "💙 Mumbai Indians (MI)"),
+        ("Challengers", "❤️ Royal Challengers Bengaluru (RCB)"),
+        ("Knight Riders", "💜 Kolkata Knight Riders (KKR)"),
+        ("Titans", "🔩 Gujarat Titans (GT)"),
+        ("Royals", "💗 Rajasthan Royals (RR)"),
+        ("Super Giants", "🤍 Lucknow Super Giants (LSG)"),
+        ("Capitals", "❤️‍🔥 Delhi Capitals (DC)"),
+        ("Sunrisers", "🧡 Sunrisers Hyderabad (SRH)"),
+        ("Punjab", "🔴 Punjab Kings (PBKS)")
+    ]
+    
+    @State private var favoriteSelection: String = "none"
+    
     var body: some View {
         Form {
             VStack(alignment: .leading, spacing: 14) {
@@ -101,18 +127,41 @@ struct SettingsView: View {
                 
                 Divider()
                 
-                // Section 3: Favorite Team Selection (Phase 6)
+                // Section 3: Favorite Team Selection (Phase 6 / Re-designed)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Favorite Team (Auto-Select)")
                         .font(.subheadline)
                         .fontWeight(.bold)
                     
-                    TextField("e.g. India, GT, AUS, ENG", text: $favoriteTeam)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: isInline ? 280 : 340)
+                    Picker("Select Team", selection: $favoriteSelection) {
+                        Text("None").tag("none")
+                        
+                        Section("International") {
+                            ForEach(popularTeams.prefix(10), id: \.key) { team in
+                                Text(team.value).tag(team.key)
+                            }
+                        }
+                        
+                        Section("IPL Franchises") {
+                            ForEach(popularTeams.suffix(10), id: \.key) { team in
+                                Text(team.value).tag(team.key)
+                            }
+                        }
+                        
+                        Text("Custom...").tag("custom")
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: isInline ? 280 : 340)
+                    
+                    if favoriteSelection == "custom" {
+                        TextField("Enter custom team name or abbreviation", text: $favoriteTeam)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: isInline ? 280 : 340)
+                            .padding(.top, 2)
+                    }
                     
                     if !isInline {
-                        Text("Auto-selects the live match featuring this team if you haven't made a choice.")
+                        Text("Auto-selects the live match featuring this team and prioritizes notifications.")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
@@ -163,7 +212,24 @@ struct SettingsView: View {
         .frame(width: isInline ? nil : 380, height: isInline ? nil : 480)
         .navigationTitle("Maidan Settings")
         .onAppear {
+            let trimmed = favoriteTeam.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                favoriteSelection = "none"
+            } else if popularTeams.contains(where: { $0.key == trimmed }) {
+                favoriteSelection = trimmed
+            } else {
+                favoriteSelection = "custom"
+            }
             NSApp.activate(ignoringOtherApps: true)
+        }
+        .onChange(of: favoriteSelection) { _, newValue in
+            if newValue == "none" {
+                favoriteTeam = ""
+            } else if newValue == "custom" {
+                // Keep favoriteTeam as-is
+            } else {
+                favoriteTeam = newValue
+            }
         }
     }
 }
@@ -185,6 +251,9 @@ struct DropdownView: View {
     
     // Keyboard focus state (Phase 11)
     @FocusState private var isFocused: Bool
+    
+    // Hover state for matches list
+    @State private var hoveredMatchID: String? = nil
     
     var body: some View {
         let liveMatchesList = matchService.allMatches.filter { $0.state == .live || $0.state == .onBreak }
@@ -588,7 +657,7 @@ struct DropdownView: View {
                                 }
                                 .padding(.trailing, 8)
                             }
-                            .frame(height: 150)
+                            .frame(maxHeight: 220)
                         }
                     }
                 }
@@ -688,63 +757,71 @@ struct DropdownView: View {
                 .padding(.bottom, 2)
             
             ForEach(matches) { match in
-                Button(action: {
-                    selectedMatchID = match.id
-                }) {
-                    HStack(spacing: 8) {
-                        // Radio dot indicating selection
-                        Image(systemName: selectedMatchID == match.id ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(selectedMatchID == match.id ? .blue : .secondary)
-                            .font(.caption)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                let homeAbbr = match.innings.first?.teamShortName ?? "T1"
-                                let awayAbbr = match.innings.last?.teamShortName ?? "T2"
-                                
-                                Text("\(homeAbbr) vs \(awayAbbr)")
-                                    .fontWeight(.semibold)
-                                    .font(.subheadline)
-                                    .foregroundColor(.primary)
-                                
-                                Text(match.format)
-                                    .font(.system(size: 8, weight: .bold))
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(Color.blue.opacity(0.12))
-                                    .foregroundColor(.blue)
-                                    .cornerRadius(3)
-                            }
+                HStack(spacing: 8) {
+                    // Radio dot indicating selection
+                    Image(systemName: selectedMatchID == match.id ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(selectedMatchID == match.id ? .blue : .secondary)
+                        .font(.caption)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            let homeAbbr = match.innings.first?.teamShortName ?? "T1"
+                            let awayAbbr = match.innings.last?.teamShortName ?? "T2"
                             
-                            // Context-based subtitle
-                            Group {
-                                if match.state == .live || match.state == .onBreak {
-                                    HStack(spacing: 4) {
-                                        Text(scoresString(for: match))
-                                        Circle()
-                                            .fill(Color.green)
-                                            .frame(width: 6, height: 6)
-                                    }
-                                } else if match.state == .finished {
-                                    Text("\(scoresString(for: match)) · \(match.statusText)")
-                                } else {
-                                    Text("Starts at \(formatStartTime(match.startTime))")
-                                }
-                            }
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                            Text("\(homeAbbr) vs \(awayAbbr)")
+                                .fontWeight(.semibold)
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                            
+                            Text(match.format)
+                                .font(.system(size: 8, weight: .bold))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.blue.opacity(0.12))
+                                .foregroundColor(.blue)
+                                .cornerRadius(3)
                         }
                         
-                        Spacer()
+                        // Context-based subtitle
+                        Group {
+                            if match.state == .live || match.state == .onBreak {
+                                HStack(spacing: 4) {
+                                    Text(scoresString(for: match))
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 6, height: 6)
+                                }
+                            } else if match.state == .finished {
+                                Text("\(scoresString(for: match)) · \(match.statusText)")
+                            } else {
+                                Text("Starts at \(formatStartTime(match.startTime))")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
                     }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .background(selectedMatchID == match.id ? Color.blue.opacity(0.08) : Color.clear)
-                    .cornerRadius(6)
-                    .contentShape(Rectangle())
+                    
+                    Spacer()
                 }
-                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .background(
+                    selectedMatchID == match.id ? Color.blue.opacity(0.08) :
+                    (hoveredMatchID == match.id ? Color.primary.opacity(0.04) : Color.clear)
+                )
+                .cornerRadius(6)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedMatchID = match.id
+                }
+                .onHover { isHovering in
+                    if isHovering {
+                        hoveredMatchID = match.id
+                    } else if hoveredMatchID == match.id {
+                        hoveredMatchID = nil
+                    }
+                }
             }
         }
     }

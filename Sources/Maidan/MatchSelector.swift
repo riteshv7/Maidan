@@ -9,23 +9,37 @@ class MatchSelector {
     /// 3. Returns the selected Match and whether the stale user selection should be cleared in UserDefaults.
     static func selectMatch(
         from apiMatches: [APIMatch],
+        filterMode: String,
         selectedMatchID: String,
         favoriteTeam: String
     ) -> (selectedMatch: Match?, clearedStaleSelection: Bool) {
-        // 1. Get all live matches
-        let liveMatches = apiMatches.filter { classify($0.state.description) == .live }
-        
-        // 2. If the user has a selected match ID, check if it is still live
+        // 1. Check if the user has a manually selected match ID, and if it is still active (live or on break)
         if !selectedMatchID.isEmpty {
-            if let userMatch = liveMatches.first(where: { $0.id == selectedMatchID }) {
+            let activeMatches = apiMatches.filter { classify($0.state.description) == .live || classify($0.state.description) == .onBreak }
+            if let userMatch = activeMatches.first(where: { $0.id == selectedMatchID }) {
                 return (userMatch.toDomain(), false)
             }
-            // The selected match is either no longer live, or has dropped off the list entirely.
-            // We will clear the stale selection and fall back to auto-select.
+            // The manually selected match is no longer active, so we clear it and fall back to auto-select
         }
         
-        // 3. Auto-select:
-        // A. Check if a favorite team is playing live
+        // 2. Auto-select based on the active feed filter:
+        let filteredMatches: [APIMatch]
+        switch filterMode {
+        case "all":
+            filteredMatches = apiMatches
+        case "ipl":
+            filteredMatches = apiMatches.filter { MatchService.isIPLMatch(homeName: $0.homeTeam.name, homeAbbr: $0.homeTeam.abbreviation, awayName: $0.awayTeam.name, awayAbbr: $0.awayTeam.abbreviation, leagueName: $0.league?.name ?? "") }
+        case "intl":
+            filteredMatches = apiMatches.filter { MatchService.isInternationalMatch(homeName: $0.homeTeam.name, homeAbbr: $0.homeTeam.abbreviation, awayName: $0.awayTeam.name, awayAbbr: $0.awayTeam.abbreviation, leagueName: $0.league?.name ?? "") }
+        case "major":
+            fallthrough
+        default:
+            filteredMatches = apiMatches.filter { MatchService.isMajorMatch(homeName: $0.homeTeam.name, homeAbbr: $0.homeTeam.abbreviation, awayName: $0.awayTeam.name, awayAbbr: $0.awayTeam.abbreviation, leagueName: $0.league?.name ?? "") }
+        }
+        
+        let liveMatches = filteredMatches.filter { classify($0.state.description) == .live }
+        
+        // A. Check if a favorite team is playing live in the filtered list
         let trimmedFav = favoriteTeam.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedFav.isEmpty {
             let favLower = trimmedFav.lowercased()

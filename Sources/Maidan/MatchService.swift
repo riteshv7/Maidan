@@ -298,10 +298,10 @@ class MatchService {
             let selectedId = currentSelectedMatchID()
             let favTeam = currentFavoriteTeam()
             
-            let apiMatchesToUse = filterMatches(result.rawMatches)
-            
+            let filterMode = UserDefaults.standard.string(forKey: "matchFilterMode") ?? "major"
             let selectionResult = MatchSelector.selectMatch(
-                from: apiMatchesToUse,
+                from: result.rawMatches,
+                filterMode: filterMode,
                 selectedMatchID: selectedId,
                 favoriteTeam: favTeam
             )
@@ -340,13 +340,15 @@ class MatchService {
         
         let liveAPIMatches = apiMatchesToUse.filter { MatchSelector.classify($0.state.description) == .live }
         var domainLiveMatches = liveAPIMatches.map { $0.toDomain() }
-        var domainAllMatches = apiMatchesToUse.map { $0.toDomain() }
+        var domainAllMatches = rawMatches.map { $0.toDomain() } // display all matches in dropdown list
         
         let selectedId = currentSelectedMatchID()
         let favTeam = currentFavoriteTeam()
+        let filterMode = UserDefaults.standard.string(forKey: "matchFilterMode") ?? "major"
         
         let selectionResult = MatchSelector.selectMatch(
-            from: apiMatchesToUse,
+            from: rawMatches,
+            filterMode: filterMode,
             selectedMatchID: selectedId,
             favoriteTeam: favTeam
         )
