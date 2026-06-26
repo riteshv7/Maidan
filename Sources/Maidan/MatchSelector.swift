@@ -9,47 +9,42 @@ class MatchSelector {
     /// 3. Returns the selected Match and whether the stale user selection should be cleared in UserDefaults.
     static func selectMatch(
         from apiMatches: [APIMatch],
-        filterMode: String,
         selectedMatchID: String,
         favoriteTeam: String
     ) -> (selectedMatch: Match?, clearedStaleSelection: Bool) {
-        // 1. Check if the user has a manually selected match ID, and if it is still active (live or on break)
+        // 1. Get all active matches (live or on break)
+        let activeMatches = apiMatches.filter { classify($0.state.description) == .live || classify($0.state.description) == .onBreak }
+        
+        // 2. If the user has a selected match ID, check if it is still active
         if !selectedMatchID.isEmpty {
-            let activeMatches = apiMatches.filter { classify($0.state.description) == .live || classify($0.state.description) == .onBreak }
             if let userMatch = activeMatches.first(where: { $0.id == selectedMatchID }) {
                 return (userMatch.toDomain(), false)
             }
-            // The manually selected match is no longer active, so we clear it and fall back to auto-select
+            // The selected match is either no longer active or has dropped off.
+            // We will clear the stale selection and fall back to auto-select.
         }
         
-        // 2. Auto-select based on the active feed filter:
-        let filteredMatches: [APIMatch]
-        switch filterMode {
-        case "all":
-            filteredMatches = apiMatches
-        case "ipl":
-            filteredMatches = apiMatches.filter { MatchService.isIPLMatch(homeName: $0.homeTeam.name, homeAbbr: $0.homeTeam.abbreviation, awayName: $0.awayTeam.name, awayAbbr: $0.awayTeam.abbreviation, leagueName: $0.league?.name ?? "") }
-        case "intl":
-            filteredMatches = apiMatches.filter { MatchService.isInternationalMatch(homeName: $0.homeTeam.name, homeAbbr: $0.homeTeam.abbreviation, awayName: $0.awayTeam.name, awayAbbr: $0.awayTeam.abbreviation, leagueName: $0.league?.name ?? "") }
-        case "major":
-            fallthrough
-        default:
-            filteredMatches = apiMatches.filter { MatchService.isMajorMatch(homeName: $0.homeTeam.name, homeAbbr: $0.homeTeam.abbreviation, awayName: $0.awayTeam.name, awayAbbr: $0.awayTeam.abbreviation, leagueName: $0.league?.name ?? "") }
-        }
+        // 3. Auto-select:
+        let liveMatches = apiMatches.filter { classify($0.state.description) == .live }
         
-        let liveMatches = filteredMatches.filter { classify($0.state.description) == .live }
-        
-        // A. Check if a favorite team is playing live in the filtered list
+        // A. Check if a favorite team is playing live (supports multiple comma-separated teams)
         let trimmedFav = favoriteTeam.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedFav.isEmpty {
-            let favLower = trimmedFav.lowercased()
-            if let favMatch = liveMatches.first(where: { match in
-                match.homeTeam.name.lowercased().contains(favLower) ||
-                match.homeTeam.abbreviation.lowercased().contains(favLower) ||
-                match.awayTeam.name.lowercased().contains(favLower) ||
-                match.awayTeam.abbreviation.lowercased().contains(favLower)
-            }) {
-                return (favMatch.toDomain(), !selectedMatchID.isEmpty)
+            let favTeams = trimmedFav.components(separatedBy: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+            
+            if !favTeams.isEmpty {
+                if let favMatch = liveMatches.first(where: { match in
+                    favTeams.contains { favLower in
+                        match.homeTeam.name.lowercased().contains(favLower) ||
+                        match.homeTeam.abbreviation.lowercased().contains(favLower) ||
+                        match.awayTeam.name.lowercased().contains(favLower) ||
+                        match.awayTeam.abbreviation.lowercased().contains(favLower)
+                    }
+                }) {
+                    return (favMatch.toDomain(), !selectedMatchID.isEmpty)
+                }
             }
         }
         

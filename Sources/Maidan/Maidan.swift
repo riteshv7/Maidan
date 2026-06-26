@@ -66,19 +66,40 @@ struct SettingsView: View {
         ("Sri Lanka", "🇱🇰 Sri Lanka"),
         ("Bangladesh", "🇧🇩 Bangladesh"),
         ("Afghanistan", "🇦🇫 Afghanistan"),
-        ("Super Kings", "💛 Chennai Super Kings (CSK)"),
-        ("Indians", "💙 Mumbai Indians (MI)"),
-        ("Challengers", "❤️ Royal Challengers Bengaluru (RCB)"),
-        ("Knight Riders", "💜 Kolkata Knight Riders (KKR)"),
-        ("Titans", "🔩 Gujarat Titans (GT)"),
-        ("Royals", "💗 Rajasthan Royals (RR)"),
-        ("Super Giants", "🤍 Lucknow Super Giants (LSG)"),
-        ("Capitals", "❤️‍🔥 Delhi Capitals (DC)"),
-        ("Sunrisers", "🧡 Sunrisers Hyderabad (SRH)"),
-        ("Punjab", "🔴 Punjab Kings (PBKS)")
+        ("Super Kings", "💛 CSK"),
+        ("Indians", "💙 MI"),
+        ("Challengers", "❤️ RCB"),
+        ("Knight Riders", "💜 KKR"),
+        ("Titans", "🔩 GT"),
+        ("Royals", "💗 RR"),
+        ("Super Giants", "🤍 LSG"),
+        ("Capitals", "❤️‍🔥 DC"),
+        ("Sunrisers", "🧡 SRH"),
+        ("Punjab", "🔴 PBKS")
     ]
     
-    @State private var favoriteSelection: String = "none"
+    private func isFavoriteTeamSelected(_ teamKey: String) -> Bool {
+        let teams = favoriteTeam.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        return teams.contains(teamKey.lowercased())
+    }
+    
+    private func toggleFavoriteTeam(_ teamKey: String) {
+        let teams = favoriteTeam.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        if teams.contains(where: { $0.lowercased() == teamKey.lowercased() }) {
+            // Remove it
+            let updated = teams.filter { $0.lowercased() != teamKey.lowercased() }
+            favoriteTeam = updated.joined(separator: ", ")
+        } else {
+            // Add it
+            var updated = teams
+            updated.append(teamKey)
+            favoriteTeam = updated.joined(separator: ", ")
+        }
+    }
     
     var body: some View {
         Form {
@@ -127,44 +148,75 @@ struct SettingsView: View {
                 
                 Divider()
                 
-                // Section 3: Favorite Team Selection (Phase 6 / Re-designed)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Favorite Team (Auto-Select)")
+                // Section 3: Favorite Team Selection (Phase 6 / Multi-Select Redesign)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Favorite Teams (Auto-Select & Alerts)")
                         .font(.subheadline)
                         .fontWeight(.bold)
                     
-                    Picker("Select Team", selection: $favoriteSelection) {
-                        Text("None").tag("none")
-                        
-                        Section("International") {
-                            ForEach(popularTeams.prefix(10), id: \.key) { team in
-                                Text(team.value).tag(team.key)
-                            }
-                        }
-                        
-                        Section("IPL Franchises") {
-                            ForEach(popularTeams.suffix(10), id: \.key) { team in
-                                Text(team.value).tag(team.key)
-                            }
-                        }
-                        
-                        Text("Custom...").tag("custom")
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: isInline ? 280 : 340)
+                    Text("Tap teams to toggle. Selected teams are prioritized for auto-selection and notification alerts.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 2)
                     
-                    if favoriteSelection == "custom" {
-                        TextField("Enter custom team name or abbreviation", text: $favoriteTeam)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: isInline ? 280 : 340)
-                            .padding(.top, 2)
-                    }
-                    
-                    if !isInline {
-                        Text("Auto-selects the live match featuring this team and prioritizes notifications.")
-                            .font(.caption2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("International")
+                            .font(.caption)
+                            .fontWeight(.semibold)
                             .foregroundColor(.secondary)
+                        
+                        let columns = [GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 6)]
+                        
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                            ForEach(popularTeams.prefix(10), id: \.key) { team in
+                                let isSelected = isFavoriteTeamSelected(team.key)
+                                Button(action: {
+                                    toggleFavoriteTeam(team.key)
+                                }) {
+                                    Text(team.value)
+                                        .font(.system(size: 10, weight: isSelected ? .bold : .regular))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(isSelected ? Color.blue.opacity(0.15) : Color.primary.opacity(0.04))
+                                        .foregroundColor(isSelected ? .blue : .primary)
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        
+                        Text("IPL Franchises")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 4)
+                        
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                            ForEach(popularTeams.suffix(10), id: \.key) { team in
+                                let isSelected = isFavoriteTeamSelected(team.key)
+                                Button(action: {
+                                    toggleFavoriteTeam(team.key)
+                                }) {
+                                    Text(team.value)
+                                        .font(.system(size: 10, weight: isSelected ? .bold : .regular))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(isSelected ? Color.blue.opacity(0.15) : Color.primary.opacity(0.04))
+                                        .foregroundColor(isSelected ? .blue : .primary)
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
+                    .padding(6)
+                    .background(Color.primary.opacity(0.02))
+                    .cornerRadius(8)
+                    
+                    TextField("Selected Teams (comma-separated)", text: $favoriteTeam)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: isInline ? 280 : 340)
+                        .padding(.top, 2)
                 }
                 
                 Divider()
@@ -212,24 +264,7 @@ struct SettingsView: View {
         .frame(width: isInline ? nil : 380, height: isInline ? nil : 480)
         .navigationTitle("Maidan Settings")
         .onAppear {
-            let trimmed = favoriteTeam.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                favoriteSelection = "none"
-            } else if popularTeams.contains(where: { $0.key == trimmed }) {
-                favoriteSelection = trimmed
-            } else {
-                favoriteSelection = "custom"
-            }
             NSApp.activate(ignoringOtherApps: true)
-        }
-        .onChange(of: favoriteSelection) { _, newValue in
-            if newValue == "none" {
-                favoriteTeam = ""
-            } else if newValue == "custom" {
-                // Keep favoriteTeam as-is
-            } else {
-                favoriteTeam = newValue
-            }
         }
     }
 }
@@ -657,7 +692,7 @@ struct DropdownView: View {
                                 }
                                 .padding(.trailing, 8)
                             }
-                            .frame(maxHeight: 220)
+                            .frame(height: 180)
                         }
                     }
                 }

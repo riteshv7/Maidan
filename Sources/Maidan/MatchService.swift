@@ -298,10 +298,9 @@ class MatchService {
             let selectedId = currentSelectedMatchID()
             let favTeam = currentFavoriteTeam()
             
-            let filterMode = UserDefaults.standard.string(forKey: "matchFilterMode") ?? "major"
+            let apiMatchesToUse = filterMatches(result.rawMatches)
             let selectionResult = MatchSelector.selectMatch(
-                from: result.rawMatches,
-                filterMode: filterMode,
+                from: apiMatchesToUse,
                 selectedMatchID: selectedId,
                 favoriteTeam: favTeam
             )
@@ -340,15 +339,13 @@ class MatchService {
         
         let liveAPIMatches = apiMatchesToUse.filter { MatchSelector.classify($0.state.description) == .live }
         var domainLiveMatches = liveAPIMatches.map { $0.toDomain() }
-        var domainAllMatches = rawMatches.map { $0.toDomain() } // display all matches in dropdown list
+        var domainAllMatches = apiMatchesToUse.map { $0.toDomain() } // respect the active filter in dropdown list
         
         let selectedId = currentSelectedMatchID()
         let favTeam = currentFavoriteTeam()
-        let filterMode = UserDefaults.standard.string(forKey: "matchFilterMode") ?? "major"
         
         let selectionResult = MatchSelector.selectMatch(
-            from: rawMatches,
-            filterMode: filterMode,
+            from: apiMatchesToUse,
             selectedMatchID: selectedId,
             favoriteTeam: favTeam
         )
@@ -465,8 +462,14 @@ class MatchService {
                 // 3. Favorite Team Match Starts Check
                 let favLower = currentFavoriteTeam().lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 if !favLower.isEmpty {
-                    let featuresFav = newMatch.name.lowercased().contains(favLower) ||
-                                      newMatch.innings.contains { $0.teamShortName.lowercased().contains(favLower) }
+                    let favTeams = favLower.components(separatedBy: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    
+                    let featuresFav = favTeams.contains { fav in
+                        newMatch.name.lowercased().contains(fav) ||
+                        newMatch.innings.contains { $0.teamShortName.lowercased().contains(fav) }
+                    }
                     if featuresFav && newMatch.state == .live {
                         sendNotification(
                             title: "Match Live! 🏏",
