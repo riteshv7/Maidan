@@ -19,8 +19,12 @@ struct MaidanApp: App {
         MenuBarExtra {
             DropdownView(matchService: matchService)
         } label: {
-            // The live score label shown directly in the macOS menu bar.
-            Text(matchService.menuBarTitle)
+            if let icon = NSImage(named: "MaidanFieldIcon") {
+                let _ = icon.isTemplate = true
+                Image(nsImage: icon)
+            } else {
+                Image(systemName: "cricket.ball.fill")
+            }
         }
         .menuBarExtraStyle(.window)
         
